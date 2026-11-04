@@ -1,0 +1,24 @@
+# 构建与运行产物
+dist/
+build/
+*.exe
+*.obj
+*.pdb
+*.zip
+
+# 过程截图 / 性能测量
+shots/
+measurements/
+
+# 早期原型基线（C# 空白工程）与汇编探针
+asm/
+baseline/
+
+# 工作记录（不入库）
+REPORT_*.md
+_scratch/
+
+# 系统文件
+Thumbs.db
+.DS_Store
+desktop.ini

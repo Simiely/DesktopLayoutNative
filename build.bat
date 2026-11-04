@@ -1,0 +1,14 @@
+@echo off
+setlocal
+set ZIG=zig
+if not "%~1"=="" set ZIG=%~1
+if defined ZIG_EXE set ZIG=%ZIG_EXE%
+
+if not exist dist mkdir dist
+echo [build] %ZIG% cc -> dist\DesktopLayoutNative.exe
+"%ZIG%" cc -target x86_64-windows-gnu -Os -ffunction-sections -fdata-sections -s "-Wl,--subsystem,windows" -o dist\DesktopLayoutNative.exe src\main.c -lole32 -loleaut32 -luuid -lshell32 -luser32 -lgdi32 -lcomctl32 -ladvapi32 -lgdiplus -lmsimg32
+if errorlevel 1 (
+  echo [build] failed: %errorlevel%
+  exit /b %errorlevel%
+)
+for %%F in (dist\DesktopLayoutNative.exe) do echo [build] ok  %%~zF bytes
