@@ -2,3 +2,7 @@
 * text=auto eol=lf
 *.md text eol=lf
 *.bat text eol=lf
+
+# 二进制：禁止 EOL 转换，图标与 COFF 对象须逐字节保真（须放在 text 规则之后）
+*.ico binary
+*.obj binary

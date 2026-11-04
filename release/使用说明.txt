@@ -1,0 +1,43 @@
+桌面布局 DesktopLayoutNative v1.0.1
+======================================
+
+1. 启动
+   双击 DesktopLayoutNative.exe。Windows 10 / 11（x64），免安装，无 .NET / Python / VC++ 依赖。
+
+2. 托盘
+   关闭主窗口 = 收进托盘，不退出。
+   托盘图标：左键单击打开主界面；右键菜单：保存当前布局 / 应用布局 / 撤销 / 创建桌面快捷方式 / 打开主界面 / 退出。
+   桌面快捷方式从托盘菜单创建（右键 →「创建桌面快捷方式」）：在桌面生成「桌面布局.lnk」，
+   指向当前 exe 并复用内嵌图标；桌面路径按系统设置解析，桌面被重定向时同样有效。
+   若桌面已有同名 .lnk 且指向其它程序，不会覆盖。
+   Win11 若在托盘区看不到图标，它可能被收进了「隐藏的图标」溢出区：
+   设置 → 个性化 → 任务栏 → 其他系统托盘图标 → 把「桌面布局」置顶。
+
+3. 开机自动启动
+   主界面勾选「开机自动启动」：写入 HKCU\Software\Microsoft\Windows\CurrentVersion\Run，
+   值为 "<本 exe 路径>" --tray（开机静默启动，不弹窗）。取消勾选即删除该值。
+
+4. 数据位置
+   %LOCALAPPDATA%\DesktopLayoutNative\data\
+     layouts\*.json            命名布局（可直接备份 / 复制到别的机器）
+     undo\undo_snapshot.json   撤销快照（单级）
+     settings.json             界面设置（confirm_delete 0/1）
+   删除整个 data 目录 = 恢复出厂状态。
+
+5. 使用要点
+   - 应用布局前，请在桌面右键 → 查看 → 取消勾选「自动排列图标」，否则 Explorer 不允许还原位置。
+   - 「删除前确认」开关在状态栏右侧，默认开启；关闭后删除立即生效并显示「已删除」，开关会持久化。
+   - 删除布局文件本身不进回收站；应用布局后的「撤销」只针对桌面图标位置。
+
+6. 系统与显示
+   - 支持多显示器与 125% / 150% 缩放；还原时目标显示器需在线。
+   - 程序内嵌 16 / 24 / 32 / 48 / 64 / 256 多尺寸图标：资源管理器、任务栏与托盘显示一致。
+   - 确认弹窗为分层窗口逐像素绘制，四角 12 px 圆角，Win10 / Win11 表现一致。
+
+7. 命令行（可选）
+   DesktopLayoutNative.exe --save "布局.json"
+   DesktopLayoutNative.exe --apply "布局.json"
+   DesktopLayoutNative.exe --undo
+   DesktopLayoutNative.exe --list
+   DesktopLayoutNative.exe --tray
+   加 --result out.json 输出结构化结果。

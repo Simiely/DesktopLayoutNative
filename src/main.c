@@ -19,6 +19,7 @@ typedef unsigned long PROPID;
 #include <gdiplus.h>
 #include <shlobj.h>
 #include <shobjidl.h>
+#include <knownfolders.h>
 #include <exdisp.h>
 #include <servprov.h>
 #include <oleauto.h>
@@ -1779,7 +1780,9 @@ static int run_cli(int argc, wchar_t **argv) {
 #define ID_TRAY_UNDO 2002
 #define ID_TRAY_OPEN 2003
 #define ID_TRAY_EXIT 2004
+#define ID_TRAY_SHORTCUT 2005
 #define ID_TRAY_LAYOUT_BASE 3000
+#define IDI_APP 101
 
 #define CLR_BG RGB(0x1e, 0x1e, 0x1e)
 #define CLR_PANEL RGB(0x2d, 0x2d, 0x30)
@@ -3387,6 +3390,121 @@ static void tray_save_layout(void) {
     }
 }
 
+/* 判断同名 .lnk 是否由本程序生成（目标路径与当前 exe 一致），避免覆盖用户其它快捷方式。 */
+static int shortcut_points_to_exe(const wchar_t *lnk, const wchar_t *exe) {
+    IShellLinkW *sl = NULL;
+    IPersistFile *pf = NULL;
+    int ok = 0;
+    HRESULT hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER,
+                                  &IID_IShellLinkW, (void **)&sl);
+    if (SUCCEEDED(hr) && sl) {
+        hr = sl->lpVtbl->QueryInterface(sl, &IID_IPersistFile, (void **)&pf);
+        if (SUCCEEDED(hr) && pf) {
+            hr = pf->lpVtbl->Load(pf, lnk, STGM_READ);
+            if (SUCCEEDED(hr)) {
+                wchar_t target[MAX_PATH * 2] = L"";
+                WIN32_FIND_DATAW fd;
+                memset(&fd, 0, sizeof(fd));
+                hr = sl->lpVtbl->GetPath(sl, target, MAX_PATH * 2, &fd, SLGP_RAWPATH);
+                if (SUCCEEDED(hr) && target[0] && _wcsicmp(target, exe) == 0) ok = 1;
+            }
+            pf->lpVtbl->Release(pf);
+        }
+        sl->lpVtbl->Release(sl);
+    }
+    return ok;
+}
+
+/* dir 为空时用 SHGetKnownFolderPath(FOLDERID_Desktop)；测试可传临时目录。 */
+static int create_shortcut_at(const wchar_t *dir) {
+    wchar_t folder[MAX_PATH * 2] = L"";
+    if (dir && dir[0]) {
+        wcsncpy(folder, dir, MAX_PATH * 2 - 1);
+    } else {
+        PWSTR p = NULL;
+        if (FAILED(SHGetKnownFolderPath(&FOLDERID_Desktop, 0, NULL, &p)) || !p) {
+            set_status(L"创建快捷方式失败：找不到桌面目录", 2);
+            return 0;
+        }
+        wcsncpy(folder, p, MAX_PATH * 2 - 1);
+        CoTaskMemFree(p);
+    }
+    folder[MAX_PATH * 2 - 1] = 0;
+
+    wchar_t exe[MAX_PATH * 2] = L"";
+    if (!GetModuleFileNameW(NULL, exe, MAX_PATH * 2)) {
+        set_status(L"创建快捷方式失败：取不到程序路径", 2);
+        return 0;
+    }
+
+    wchar_t lnk[MAX_PATH * 2];
+    swprintf(lnk, MAX_PATH * 2, L"%s\\桌面布局.lnk", folder);
+
+    /* 先初始化 COM，后面读旧 .lnk 的目标路径与写新 .lnk 都要用。 */
+    HRESULT co = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    int need_uninit = SUCCEEDED(co) ? 1 : 0;
+    if (FAILED(co) && co != RPC_E_CHANGED_MODE) {
+        set_status(L"创建快捷方式失败：COM 初始化失败", 2);
+        return 0;
+    }
+
+    if (GetFileAttributesW(lnk) != INVALID_FILE_ATTRIBUTES &&
+        !shortcut_points_to_exe(lnk, exe)) {
+        if (need_uninit) CoUninitialize();
+        set_status(L"桌面已有同名快捷方式（指向其它程序），未覆盖", 2);
+        return 0;
+    }
+
+    IShellLinkW *sl = NULL;
+    IPersistFile *pf = NULL;
+    HRESULT hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER,
+                                  &IID_IShellLinkW, (void **)&sl);
+    if (SUCCEEDED(hr) && sl)
+        hr = sl->lpVtbl->QueryInterface(sl, &IID_IPersistFile, (void **)&pf);
+    if (SUCCEEDED(hr) && pf) {
+        sl->lpVtbl->SetPath(sl, exe);
+        sl->lpVtbl->SetDescription(sl, L"桌面布局");
+        sl->lpVtbl->SetIconLocation(sl, exe, 0);
+        hr = pf->lpVtbl->Save(pf, lnk, TRUE);
+    }
+    if (pf) pf->lpVtbl->Release(pf);
+    if (sl) sl->lpVtbl->Release(sl);
+    if (need_uninit) CoUninitialize();
+
+    if (SUCCEEDED(hr)) {
+        set_status(L"已在桌面创建快捷方式", 1);
+        return 1;
+    }
+    set_status(L"创建快捷方式失败", 2);
+    return 0;
+}
+
+static int shortcut_test(const wchar_t *dir) {
+    wchar_t desk[MAX_PATH * 2] = L"";
+    PWSTR p = NULL;
+    if (SUCCEEDED(SHGetKnownFolderPath(&FOLDERID_Desktop, 0, NULL, &p)) && p) {
+        wcsncpy(desk, p, MAX_PATH * 2 - 1);
+        CoTaskMemFree(p);
+    }
+    char *u = utf8_from_w(desk);
+    printf("desktop=%s\n", u ? u : "(null)");
+    free(u);
+
+    int ok = create_shortcut_at(dir);
+    wchar_t lnk[MAX_PATH * 2];
+    swprintf(lnk, MAX_PATH * 2, L"%s\\桌面布局.lnk", dir);
+    u = utf8_from_w(lnk);
+    printf("lnk=%s\n", u ? u : "(null)");
+    free(u);
+    wchar_t exe[MAX_PATH * 2] = L"";
+    GetModuleFileNameW(NULL, exe, MAX_PATH * 2);
+    u = utf8_from_w(exe);
+    printf("target=%s\n", u ? u : "(null)");
+    free(u);
+    printf("result=%d\n", ok);
+    return ok ? 0 : 1;
+}
+
 static void tray_menu(void) {
     HMENU menu = CreatePopupMenu();
     if (!menu) return;
@@ -3402,6 +3520,7 @@ static void tray_menu(void) {
     AppendMenuW(menu, MF_STRING | (g_undo_available ? 0 : MF_GRAYED),
                 ID_TRAY_UNDO, L"撤销上一次应用");
     AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
+    AppendMenuW(menu, MF_STRING, ID_TRAY_SHORTCUT, L"创建桌面快捷方式");
     AppendMenuW(menu, MF_STRING, ID_TRAY_OPEN, L"打开主界面");
     AppendMenuW(menu, MF_STRING, ID_TRAY_EXIT, L"退出");
 
@@ -3420,6 +3539,8 @@ static void tray_menu(void) {
         apply_layout_at((int)(cmd - ID_TRAY_LAYOUT_BASE));
     } else if (cmd == ID_TRAY_UNDO) {
         on_undo_click();
+    } else if (cmd == ID_TRAY_SHORTCUT) {
+        create_shortcut_at(NULL);
     } else if (cmd == ID_TRAY_OPEN) {
         show_main_window();
     } else if (cmd == ID_TRAY_EXIT) {
@@ -3944,6 +4065,13 @@ static HICON make_app_icon(int size) {
     return icon;
 }
 
+/* 优先用 exe 内嵌的多尺寸 ICO（资源 ID 101）；资源缺失时退回运行时手绘。 */
+static HICON load_app_icon(int size) {
+    HICON h = (HICON)LoadImageW(g_inst, MAKEINTRESOURCEW(IDI_APP), IMAGE_ICON,
+                                size, size, LR_DEFAULTCOLOR);
+    return h ? h : make_app_icon(size);
+}
+
 static int single_instance_allow(void) {
     g_instance_mutex = CreateMutexW(NULL, TRUE, L"Local\\DesktopLayoutNative.SingleInstance");
     if (!g_instance_mutex) return 1;
@@ -4035,8 +4163,8 @@ static int ui_bench(void) {
 }
 
 static int run_gui(HINSTANCE hInst, int show) {
-    g_iconSmall = make_app_icon(16);
-    g_iconBig = make_app_icon(32);
+    g_iconSmall = load_app_icon(16);
+    g_iconBig = load_app_icon(32);
     WNDCLASSEXW wc;
     memset(&wc, 0, sizeof(wc));
     wc.cbSize = sizeof(wc);
@@ -4056,6 +4184,8 @@ static int run_gui(HINSTANCE hInst, int show) {
         CW_USEDEFAULT, CW_USEDEFAULT, MulDiv(WIN_W_OUTER, 96, 96),
         MulDiv(WIN_H_OUTER, 96, 96), NULL, NULL, hInst, NULL);
     if (!hwnd) return 3;
+    SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)g_iconSmall);
+    SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)g_iconBig);
     if (g_start_in_tray) {
         ShowWindow(hwnd, SW_HIDE);
     } else {
@@ -4103,6 +4233,10 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmd, int nShow) {
             g_start_in_tray = 1;
         } else if (_wcsicmp(argv[1], L"--test-focus") == 0) {
             g_test_focus = 1;
+        } else if (_wcsicmp(argv[1], L"--shortcut-test") == 0 && argc > 2) {
+            int code = shortcut_test(argv[2]);
+            LocalFree(argv);
+            return code;
         } else if (_wcsicmp(argv[1], L"--ui-bench") == 0) {
             LocalFree(argv);
             return ui_bench();

@@ -5,6 +5,8 @@ build/
 *.obj
 *.pdb
 *.zip
+# 图标构建输入：由 assets/app_icon.py 生成，随仓库提供以便 build.bat 直接链接
+!assets/app_icon.obj
 
 # 过程截图 / 性能测量
 shots/

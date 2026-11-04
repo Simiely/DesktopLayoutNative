@@ -1,0 +1,4 @@
+# 图标资源定义（RC 源）。仓库内同时提供 app_icon.ico 与由 app_icon.py
+# 生成的 app_icon.obj（等价于 windres -O coff 的 .rsrc 段），build.bat 直接
+# 链接 obj，避免依赖 Windows SDK 的 rc.exe。
+101 ICON "app_icon.ico"

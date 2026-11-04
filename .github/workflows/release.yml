@@ -1,0 +1,63 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - name: 检出
+        uses: actions/checkout@v4
+
+      - name: 下载 Zig
+        shell: pwsh
+        run: |
+          $url = "https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip"
+          curl.exe -L --fail -o zig.zip $url
+          Expand-Archive zig.zip -DestinationPath zig
+          $zig = (Get-ChildItem zig -Recurse -Filter zig.exe | Select-Object -First 1).FullName
+          "ZIG_EXE=$zig" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: 构建
+        shell: pwsh
+        run: |
+          & .\build.bat "$env:ZIG_EXE"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: 校验产物
+        shell: pwsh
+        run: |
+          $exe = "dist\DesktopLayoutNative.exe"
+          $len = (Get-Item $exe).Length
+          $sha = (Get-FileHash $exe -Algorithm SHA256).Hash
+          Write-Host "size=$len sha256=$sha"
+          if ($len -ne 175616) { throw "unexpected size: $len" }
+          if ($sha -ne "7D15D631A7E3DA843EB62CE81F84392F886D4C59037634263A1F649528CDFA26") {
+            throw "unexpected sha256: $sha"
+          }
+
+      - name: 打包
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path out | Out-Null
+          Copy-Item "dist\DesktopLayoutNative.exe" "out\DesktopLayoutNative.exe"
+          Copy-Item "release\使用说明.txt" "out\使用说明.txt"
+          $zip = "DesktopLayoutNative-$env:GITHUB_REF_NAME-win-x64.zip"
+          Compress-Archive -Path "out\DesktopLayoutNative.exe", "out\使用说明.txt" -DestinationPath $zip -CompressionLevel Optimal
+          "ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: 发布
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME `
+            --title $env:GITHUB_REF_NAME `
+            --notes-file "release/notes-$env:GITHUB_REF_NAME.md" `
+            $env:ZIP
