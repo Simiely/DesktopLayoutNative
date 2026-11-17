@@ -1,0 +1,35 @@
+name: repo-check
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'schema/**'
+      - 'tools/**'
+      - 'README.md'
+      - 'AGENTS.md'
+      - 'DEVELOPMENT.md'
+      - 'CHANGELOG.md'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  invariants:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Doc dependencies
+        # 文档仓（B 档）的 requirements.txt 就是文档依赖，直接 -r；
+        # 代码仓（A 档）才需要显式装，避免装到构建工具清单。
+        run: python -m pip install -r requirements.txt
+      - name: Invariants (link-only)
+        run: python tools/repo-kit/check_repo.py --root .
+      - name: Kit lock
+        run: pwsh tools/update-repo-kit.ps1 -Check

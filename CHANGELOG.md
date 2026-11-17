@@ -3,6 +3,14 @@
 本项目版本格式：`主版本.次版本.修订`，按版本倒序分节。
 版本号以 Release tag 为准。
 
+## 文档维护 · 2026-11-17
+
+- 接入 knowledge-base 的**单项目规范**（spec 2.1.3 / repo-kit 2.7.3，profile `link-only`）
+- 新增 `schema/taxonomy.json`、`tools/repo-kit/`、`tools/update-repo-kit.ps1`、`schema/kit.lock.json` 与 CI
+- 补 `AGENTS.md`（四件套此前缺这一份）
+- 新增 `requirements.txt`：仅文档依赖
+- - 验收：`REPO CHECK: PASS`（ERROR=0）、`KIT LOCK: PASS (v2.7.3, spec=2.1.3)`
+
 ## [1.0.1] - 2026-11-04
 
 图标与桌面快捷方式。
