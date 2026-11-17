@@ -1,5 +1,6 @@
 # AGENTS.md · 项目规则
 
+> 📌 **文档基线**：2026-11-17（commit `beb1823`）补 AGENTS.md 并接入单项目规范机器层（link-only）
 > 给 AI / 未来的你：只记代码里看不出的关键信息。架构与构建细节见 [DEVELOPMENT.md](DEVELOPMENT.md)。
 
 ## 技术栈
